@@ -21,6 +21,7 @@
 */
 
 require_once Mage::getModuleDir('', 'Fruugo_Integration') . '/Helper/ProductsFeedGenerator.php';
+require_once Mage::getModuleDir('', 'Fruugo_Integration') . '/Helper/ProductsFeedGeneratorProfiler.php';
 require_once Mage::getModuleDir('', 'Fruugo_Integration') . '/Helper/FruugoCountriesSeeder.php';
 
 class Fruugo_Integration_ProductsController extends Mage_Core_Controller_Front_Action
@@ -28,50 +29,43 @@ class Fruugo_Integration_ProductsController extends Mage_Core_Controller_Front_A
     public function indexAction()
     {
         $productsFeedGenerator = new Fruugo_Integration_ProductsFeedGenerator();
-        $productsXml = $productsFeedGenerator->generateProdcutsFeed(false);
-        $this->writeProductsFile($productsXml->asXML());
-        $this->streamXmlFile($productsXml->asXML());
+        $cachedFile = $productsFeedGenerator->generateProdcutsFeed(false);
+        $this->streamXmlFile($cachedFile);
+    }
+
+    public function profilerAction()
+    {
+        $productsFeedGenerator = new Fruugo_Integration_ProductsFeedGeneratorProfiler();
+        $cachedFile = $productsFeedGenerator->generateProdcutsFeed(false);
+        $this->streamXmlFile($cachedFile);
     }
 
     public function dataFeedAction()
     {
         $productsFeedGenerator = new Fruugo_Integration_ProductsFeedGenerator();
         $cachedFile = $productsFeedGenerator->generateProdcutsFeed(true);
-        if (file_exists($cachedFile)) {
-            $productsXmlStr = file_get_contents($cachedFile);
-            $this->streamXmlFile($productsXmlStr);
-        } else {
-            $this->indexAction();
-        }
+        $this->streamXmlFile($cachedFile);
     }
 
-    private function writeProductsFile($productsXmlStr)
+    private function streamXmlFile($cachedFile)
     {
-        $outputDir = Mage::getModuleDir('', 'Fruugo_Integration') . '/controllers/products.xml';
-        $productsFeedFile = fopen($outputDir, "w");
-        fwrite($productsFeedFile, $productsXmlStr);
-        fclose($productsFeedFile);
-    }
-
-    private function streamXmlFile($productsXmlStr)
-    {
-        if (function_exists('mb_strlen')) {
-            $filesize = mb_strlen($productsXmlStr, '8bit');
-        } else {
-            $filesize = strlen($productsXmlStr);
+        if (!is_file($cachedFile) || !is_readable($cachedFile)) {
+            // return 404
+            $this->norouteAction();
+            return;
         }
 
-        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-        header('Content-Description: File Transfer');
-        header('Content-type: text/xml');
-        header('Expires: 0');
-        header('Pragma: public');
-        header('Content-Disposition: attachment; filename=products.xml');
-        header('Content-Length: ' . $filesize);
+        $this->getResponse()
+            ->setHttpResponseCode(200)
+            ->setHeader('Cache-Control', 'must-revalidate, post-check=0, pre-check=0', true)
+            ->setHeader('Pragma', 'public', true)
+            ->setHeader('Content-type', 'application/force-download')
+            ->setHeader('Content-Length', filesize($cachedFile))
+            ->setHeader('Content-Disposition', 'attachment' . '; filename=' . basename($cachedFile));
 
-        $file = fopen('php://output', 'w');
-        fwrite($file, $productsXmlStr);
-        fclose($file);
+        $this->getResponse()->clearBody();
+        $this->getResponse()->sendHeaders();
+        readfile($cachedFile);
         exit;
     }
 

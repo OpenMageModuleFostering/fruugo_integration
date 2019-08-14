@@ -119,6 +119,46 @@
                             <show_in_store>1</show_in_store>
                             <comment>Choose a default store for a language to export product description.</comment>
                         </language_store>
+                        <export_page_size translate="label">
+                            <label>Export Page Size</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_ExportPageSize</source_model>
+                            <sort_order>60</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>The number of products to process and write to xml per batch.</comment>
+                        </export_page_size>
+                        <max_resources_load translate="label">
+                            <label>Max Resources</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_MaxResourcesLoad</source_model>
+                            <sort_order>70</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>Maximum average system load (the number of processes in the system run queue, based on /proc/loadavg) allowed over the last minute, not available on Windows Servers because php sys_getloadavg() function is not implemented on Windows platforms.</comment>
+                        </max_resources_load>
+                        <sleep_time_sec translate="label">
+                            <label>Sleep time seconds</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_SleepTimeSec</source_model>
+                            <sort_order>80</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>Time to sleep for if over load limit during products export</comment>
+                        </sleep_time_sec>
+                        <max_errors translate="label">
+                            <label>Max Errors Allowed</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_MaxErrors</source_model>
+                            <sort_order>90</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>The number of errors after which the exporting products process will abort, set to -1 to disable</comment>
+                        </max_errors>
                     </fields>
                 </products_options>
                 <orders_options translate="label" module="integration">

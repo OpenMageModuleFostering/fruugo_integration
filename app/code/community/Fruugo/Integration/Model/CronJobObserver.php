@@ -30,14 +30,10 @@ class Fruugo_Integration_Model_CronJobObserver
     {
         // Export products xml
         $productsFeedGenerator = new Fruugo_Integration_ProductsFeedGenerator();
-        $xml = $productsFeedGenerator->generateProdcutsFeed(false)->asXML();
 
         try {
             Fruugo_Integration_Helper_Logger::log("Writing exported products to file.");
-            $outputDir = Mage::getModuleDir('', 'Fruugo_Integration') . '/controllers/products.xml';
-            $myfile = fopen($outputDir, "w");
-            fwrite($myfile, $xml);
-            fclose($myfile);
+            $productsFeedGenerator->generateProdcutsFeed(false);
             Fruugo_Integration_Helper_Logger::log("Writing products data feed finished.");
         } catch (Exception $e) {
             Mage::logException($e);

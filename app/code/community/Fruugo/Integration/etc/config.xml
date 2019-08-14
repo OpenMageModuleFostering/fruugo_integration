@@ -24,7 +24,7 @@
 <config>
     <modules>
         <Fruugo_Integration>
-            <version>1.0.5</version>    <!-- Version number of your module -->
+            <version>1.0.6</version>    <!-- Version number of your module -->
         </Fruugo_Integration>
     </modules>
     <global>
@@ -145,6 +145,11 @@
             <products_options>
                 <export_frequency>12</export_frequency>
                 <descrption_type>long</descrption_type>
+                <export_page_size>100</export_page_size>
+                <max_resources_load>0.5</max_resources_load>
+                <sleep_time_sec>20</sleep_time_sec>
+                <max_errors>30</max_errors>
+                <track_last_id>1</track_last_id>
             </products_options>
             <orders_options>
                 <fetch_frequency>4</fetch_frequency>
