@@ -24,7 +24,7 @@
 <config>
     <modules>
         <Fruugo_Integration>
-            <version>1.0.6</version>    <!-- Version number of your module -->
+            <version>1.0.7</version>    <!-- Version number of your module -->
         </Fruugo_Integration>
     </modules>
     <global>

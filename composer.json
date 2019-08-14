@@ -3,7 +3,7 @@
     "type": "magento-module",
     "license": "GNU",
     "homepage": "",
-    "description": "This is a plugin for Magento 1.8 - 1.9 that provides integration with the Fruugo products and orders API.",
+    "description": "This is a plugin for Magento 1.7 - 1.9 that provides integration with the Fruugo products and orders API.",
     "authors": [
     {
         "name": "inoutput.io",
