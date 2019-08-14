@@ -1,0 +1,37 @@
+<!--
+/**
+* NOTICE OF LICENSE
+*
+* Magento extension which extracts a product feed from Magento, imports the feed into Fruugo and uses the Fruugo Order API to export all Fruugo orders into Magento.
+*
+* Copyright (C) 2015  Fruugo.com Ltd
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* See the GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License along with this program.
+* If not, see <http://www.gnu.org/licenses/>.
+*/
+-->
+<style>
+    #prd-country-select { min-height:200px; min-width:200px; margin-bottom: 10px; }
+    #restrict-prd-country::-moz-focus-inner { padding:0; border:0; } /* FF Fix */
+    #restrict-prd-country { -webkit-border-fit:lines; } /* <- Safari & Google Chrome Fix */
+    #restrict-prd-country,
+    .form-button { border-width:1px; border-style:solid; border-color:#ed6502 #a04300 #a04300 #ed6502; padding:1px 7px 2px 7px; background:#ffac47 url(images/btn_bg.gif) repeat-x 0 100%; color:#fff; font:bold 12px arial, helvetica, sans-serif; cursor:pointer; text-align:center !important; white-space:nowrap; }
+    #restrict-prd-country:hover                    { background:#f77c16 url(images/btn_over_bg.gif) repeat-x 0 0; }
+    #restrict-prd-country:active                   { background:#f77c16 url(images/btn_on_bg.gif) repeat-x 0 0; }
+    #restrict-prd-country span                     { line-height:1.35em; background-repeat:no-repeat; background-position:0 50%; }
+    #restrict-prd-country span span                { background:none !important; padding:0 !important; margin:0 !important; display:inline !important; }
+</style>
+<?php
+    echo '<h4>Select the countries to restrict the product display on Fruugo. Please only use if this product differs from your standard account settings.</h4>';
+    echo $this->getCountrySelectForm();
+    echo '<p>Please click the Submit button to save.</p>';

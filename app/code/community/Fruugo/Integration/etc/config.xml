@@ -1,0 +1,161 @@
+<?xml version="1.0"?>
+<!--
+/**
+* NOTICE OF LICENSE
+*
+* Magento extension which extracts a product feed from Magento, imports the feed into Fruugo and uses the Fruugo Order API to export all Fruugo orders into Magento.
+*
+* Copyright (C) 2015  Fruugo.com Ltd
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* See the GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License along with this program.
+* If not, see <http://www.gnu.org/licenses/>.
+*/
+-->
+<config>
+    <modules>
+        <Fruugo_Integration>
+            <version>1.0.0</version>    <!-- Version number of your module -->
+        </Fruugo_Integration>
+    </modules>
+    <global>
+        <models>
+            <integration>
+                <class>Fruugo_Integration_Model</class>
+                <resourceModel>integration_resource</resourceModel>
+            </integration>
+            <integration_resource>
+                <class>Fruugo_Integration_Model_Resource</class>
+                <entities>
+                    <shipment>
+                        <table>fruugo_shipment</table>
+                    </shipment>
+                    <countries>
+                        <table>fruugo_product_countries</table>
+                    </countries>
+                </entities>
+            </integration_resource>
+        </models>
+        <helpers>
+            <integration>
+                <class>Fruugo_Integration_Helper</class>
+            </integration>
+        </helpers>
+        <resources>
+            <fruugo_attributes_setup>
+                <setup>
+                    <module>Fruugo_Integration</module>
+                    <class>Mage_Eav_Model_Entity_Setup</class>
+                </setup>
+            </fruugo_attributes_setup>
+        </resources>
+        <blocks>
+            <integration>
+                <class>Fruugo_Integration_Block</class>
+            </integration>
+        </blocks>
+        <fieldsets>
+            <sales_convert_quote>
+                <fruugo_order_id>
+                    <to_order>*</to_order>
+                </fruugo_order_id>
+            </sales_convert_quote>
+            <sales_convert_quote_item>
+                <fruugo_product_id>
+                    <to_order_item>*</to_order_item>
+                </fruugo_product_id>
+                <fruugo_sku_id>
+                    <to_order_item>*</to_order_item>
+                </fruugo_sku_id>
+            </sales_convert_quote_item>
+        </fieldsets>
+     </global>
+    <frontend>
+        <routers>
+            <integration>
+                <use>standard</use>
+                <args>
+                    <module>Fruugo_Integration</module>
+                    <frontName>fruugo-integration</frontName>
+                </args>
+            </integration>
+        </routers>
+    </frontend>
+    <admin>
+         <routers>
+            <adminhtml>
+                <args>
+                    <modules>
+                        <integration after="Mage_Adminhtml">Fruugo_Integration</integration>
+                    </modules>
+                </args>
+            </adminhtml>
+        </routers>
+    </admin>
+    <adminhtml>
+        <layout>
+            <updates>
+                <integration>
+                    <file>integration.xml</file>
+                </integration>
+            </updates>
+        </layout>
+        <acl>
+            <resources>
+                <all>
+                    <title>Allow Everything</title>
+                </all>
+                <admin>
+                    <children>
+                        <system>
+                            <children>
+                                <config>
+                                    <children>
+                                        <integration_options>
+                                            <title>Integration Options</title>
+                                        </integration_options>
+                                    </children>
+                                </config>
+                            </children>
+                        </system>
+                    </children>
+                </admin>
+            </resources>
+        </acl>
+    </adminhtml>
+    <default>
+        <integration_options>
+            <products_options>
+                <export_frequency>12</export_frequency>
+                <descrption_type>long</descrption_type>
+            </products_options>
+            <orders_options>
+                <fetch_frequency>4</fetch_frequency>
+                <payment_method>checkmo</payment_method>
+            </orders_options>
+        </integration_options>
+    </default>
+    <crontab>
+        <jobs>
+            <export_products>
+                <run>
+                    <model>integration/CronJobObserver::exportProducts</model>
+                </run>
+            </export_products>
+            <download_orders>
+                <run>
+                    <model>integration/CronJobObserver::downloadOrders</model>
+                </run>
+            </download_orders>
+        </jobs>
+    </crontab>
+</config>
