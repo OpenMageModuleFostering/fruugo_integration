@@ -20,27 +20,9 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-/**
- * Used in creating options for Fruugo product descritption type
- *
- */
-class Fruugo_Integration_Model_Adminhtml_System_Config_Source_OrderPaymentMethod
+class Fruugo_Integration_Model_Payment extends Mage_Payment_Model_Method_Abstract
 {
-    /**
-     * Options getter
-     *
-     * @return array
-     */
-    public function toOptionArray()
-    {
-        $paymentMethods = array();
-        $allActivePaymentMethods = Mage::getModel('payment/config')->getActiveMethods();
-
-        foreach ($allActivePaymentMethods as $key => $value) {
-            $label = $paymentTitle = Mage::getStoreConfig('payment/'.$key.'/title');
-            array_push($paymentMethods, array('value' => $key, 'label' => $label));
-        }
-
-        return $paymentMethods;
-    }
+    protected $_code = Fruugo_Integration_Helper_Defines::FRUUGO_PAYMENT_METHOD;
+    protected $_canUseCheckout = false;
+    protected $_canUseForMultishipping = false;
 }

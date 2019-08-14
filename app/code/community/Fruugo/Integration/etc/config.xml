@@ -24,7 +24,7 @@
 <config>
     <modules>
         <Fruugo_Integration>
-            <version>1.0.2</version>    <!-- Version number of your module -->
+            <version>1.0.3</version>    <!-- Version number of your module -->
         </Fruugo_Integration>
     </modules>
     <global>
@@ -133,6 +133,14 @@
         </acl>
     </adminhtml>
     <default>
+        <payment>
+            <fruugopayment>
+                <active>1</active>
+                <model>integration/Payment</model>
+                <title>Fruugo Payment Method</title>
+            </fruugopayment>
+         </payment>
+
         <integration_options>
             <products_options>
                 <export_frequency>12</export_frequency>
@@ -140,7 +148,6 @@
             </products_options>
             <orders_options>
                 <fetch_frequency>4</fetch_frequency>
-                <payment_method>checkmo</payment_method>
             </orders_options>
         </integration_options>
     </default>

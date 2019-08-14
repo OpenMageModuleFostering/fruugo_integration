@@ -25,4 +25,5 @@ class Fruugo_Integration_Helper_Defines extends Mage_Core_Helper_Abstract
     const FRUUGO_ORDERS_ENDPOINT = 'https://www.fruugo.com/orders';
     const FRUUGO_COUNTRIES_ENDPOINT = 'http://mintegproxy.fruugo.net/feeds/FruugoCountriesXML.xml';
     const FRUUGO_COUNTRIES_FILE_NAME = 'fruugo_countries.json';
+    const FRUUGO_PAYMENT_METHOD = 'fruugopayment';
 }

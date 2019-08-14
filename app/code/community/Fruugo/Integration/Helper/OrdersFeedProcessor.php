@@ -205,7 +205,7 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         $shippingAddress = $quote->getShippingAddress()->addData($addressData);
 
         // set payment method
-        $paymentMethod = Mage::getStoreConfig('integration_options/orders_options/payment_method');
+        $paymentMethod = Fruugo_Integration_Helper_Defines::FRUUGO_PAYMENT_METHOD;
         $shippingAddress->setCollectShippingRates(true)->collectShippingRates()
               ->setShippingMethod('flatrate_flatrate')->setPaymentMethod($paymentMethod);
         $quote->getPayment()->importData(array('method' => $paymentMethod));
