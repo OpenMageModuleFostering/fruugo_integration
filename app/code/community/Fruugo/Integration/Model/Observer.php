@@ -42,19 +42,15 @@ class Fruugo_Integration_Model_Observer
             $order = $event->getOrder();
             $fruugoId = $order->getFruugoOrderId();
 
-            if (empty($fruugoId) && $fruugoId === null) {
-                $message = "Cannot process order, no fruugoId found for order: " . $order->getId();
-                $this->_writeLog($message, self::$ERROR);
-                throw new Exception($message);
-            }
+            if (!empty($fruugoId) && $fruugoId !== null) {
+                if ($order->getStatus() == 'canceled') {
+                    $this->beforeCancelOrder($order, $fruugoId);
+                }
 
-            if ($order->getStatus() == 'canceled') {
-                $this->beforeCancelOrder($order, $fruugoId);
-            }
-
-            // When creating credit memo, order status changes to "processing"
-            if ($order->getStatus() == 'processing') {
-                $this->beforeSaveRefund($order, $fruugoId);
+                // When creating credit memo, order status changes to "processing"
+                if ($order->getStatus() == 'processing') {
+                    $this->beforeSaveRefund($order, $fruugoId);
+                }
             }
         } catch (Exception $ex) {
             Mage::logException($ex);
