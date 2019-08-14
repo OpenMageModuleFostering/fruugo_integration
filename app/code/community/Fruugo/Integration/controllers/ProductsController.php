@@ -125,4 +125,18 @@ class Fruugo_Integration_ProductsController extends Mage_Core_Controller_Front_A
         Fruugo_Integration_Helper_FruugoCountriesSeeder::getFruugoCountries();
         $this->_redirectReferer();
     }
+
+    public function performanceReportAction()
+    {
+        $reportPath =  Mage::getModuleDir('', 'Fruugo_Integration') . '/controllers/report.json';
+
+        if (!file_exists($reportPath)) {
+            die('No performance report has been generated.');
+        }
+
+        $json = file_get_contents($reportPath);
+        header('Content-disposition: attachment; filename=performance_report.json');
+        header('Content-type: application/json');
+        echo $json;
+    }
 }

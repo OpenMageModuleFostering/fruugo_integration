@@ -24,16 +24,29 @@ require_once Mage::getModuleDir('', 'Fruugo_Integration') . '/Helper/Logger.php'
 
 class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 {
-    protected $MONITOR_RESOURCES = true; // Should the script check resource usage while running
-    protected $MAX_RESOURCES = 0.5; // Maximum load average allowed in the last minute
-    protected $SLEEP_TIME_SEC = 20; // Time to sleep for if over load limit
+    // Should the script check resource usage while running
+    protected $MONITOR_RESOURCES = true;
 
-    protected $MAX_ERRORS = 30; // The number of errors after which the script will abort, set to -1 to disable
-    protected $PAGE_SIZE = 100; // The number of products to process per batch
-    // whether or not to track the last id processed to avoid a double process if items are deleted
-    // in between selecting batches, incurs a small performance cost.
+    // Maximum load average allowed in the last minute
+    protected $MAX_RESOURCES = 0.5;
+
+    // Time to sleep for if over load limit
+    protected $SLEEP_TIME_SEC = 20;
+
+    // The number of errors after which the script will abort, set to -1 to disable
+    protected $MAX_ERRORS = 30;
+
+    // The number of products to process per batch
+    protected $PAGE_SIZE = 100;
+
+    // Whether or not to track the last id processed to avoid a double process
+    // if items are deleted in between selecting batches, incurs a small
+    // performance cost.
     protected $TRACK_LAST_ID = true;
+    protected $NUMBER_OF_REPORTS_TO_KEEP = 10;
 
+    protected $loadCheckCount = 0;
+    protected $loadCheckTotal = 0.0;
     protected $stores = null;
     protected $taxHelper = null;
     protected $taxCalculation = null;
@@ -46,13 +59,13 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
     protected $currencyConverter = null;
     protected $storeBaseCurrencies = null;
     protected $shouldConvertCurrency = true;
+    protected $tempProductObj = false;
 
     protected static $ALWAYS = Fruugo_Integration_Helper_Logger::ALWAYS;
     protected static $ERROR = Fruugo_Integration_Helper_Logger::ERROR;
     protected static $WARNING = Fruugo_Integration_Helper_Logger::WARNING;
     protected static $INFO = Fruugo_Integration_Helper_Logger::INFO;
     protected static $DEBUG = Fruugo_Integration_Helper_Logger::DEBUG;
-
 
     public function generateProdcutsFeed($cached = false)
     {
@@ -74,12 +87,12 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         $f = fopen($lockFile, 'w');
         if ($f === false) {
             $this->_writeLog('Did not start Fruugo products export because the script is already running.', self::$WARNING);
-            die('Cannot create lock file');
+            die('FuugoMagentoProductsFeed: Cannot create lock file');
         }
 
         if (!flock($f, LOCK_EX | LOCK_NB)) {
             $this->_writeLog('Did not start Fruugo products export because the script is already running.', self::$WARNING);
-            die('Cannot create lock file');
+            die('FuugoMagentoProductsFeed: Cannot create lock file');
         } else {
             $this->_writeLog('Beginning export of products feed...', self::$ALWAYS);
         }
@@ -161,9 +174,8 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 
                             if ($productXml) {
                                 $xmlBuffer .= $productXml;
+                                $numOfProds++;
                             }
-
-                            $numOfProds++;
                         } catch (Exception $ex) {
                             $errorsCount += 1;
                             Mage::logException($ex);
@@ -263,26 +275,65 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         }
 
         // SkuId *M
-        $productXml->addChild('SkuId', htmlspecialchars($product->getSku()));
+        if ($product->getSku()) {
+            $productXml->addChild('SkuId', htmlspecialchars($product->getSku()));
+        } else {
+            $skuId = isset($parentProduct)
+                ? "dbid{$parentProduct->getId()}_attr{$product->getId()}"
+                : "dbid{$product->getId()}";
 
-        // EAN *R
-        if ($product->getEan() !== null) {
-            $productXml->addChild('EAN', $product->getEan());
+            $productXml->addChild('SkuId', $skuId);
         }
 
-        // ISBN *O
-        if ($product->getIsbn() !== null) {
-            $productXml->addChild('ISBN', $product->getIsbn());
+        $mappedAttributes = $this->_getMappedProductAttributes(array(
+            'EAN'           => $this->eanAttributes,
+            'ISBN'          => $this->isbnAttributes,
+            'Brand'         => $this->brandAttributes,
+            'Manufacturer'  => $this->manufacturerAttributes
+        ), $product);
+
+        // Get parent ones if variant's Brand & Manufacturer are empty
+        if (isset($parentProduct)) {
+            if (!array_key_exists('Brand', $mappedAttributes)
+                || empty($mappedAttributes['Brand'])
+                || !array_key_exists('brand', $mappedAttributes['Brand'])
+                || $mappedAttributes['Brand']['brand'] == false) {
+                    $parentMappedBrandAttributes = $this->_getMappedProductAttributes(array(
+                        'Brand' => $this->brandAttributes
+                    ), $parentProduct);
+
+                    if (array_key_exists('Brand', $parentMappedBrandAttributes)) {
+                        $mappedAttributes['Brand'] = $parentMappedBrandAttributes['Brand'];
+                    }
+            }
+
+            if (!array_key_exists('Manufacturer', $mappedAttributes)
+                || empty($mappedAttributes['Manufacturer'])
+                || !array_key_exists('manufacturer', $mappedAttributes['Manufacturer'])
+                || $mappedAttributes['Manufacturer']['manufacturer'] == false) {
+                    $parentMappedManufacturerAttributes = $this->_getMappedProductAttributes(array(
+                        'Manufacturer' => $this->manufacturerAttributes
+                    ), $parentProduct);
+
+                    if (array_key_exists('Manufacturer', $parentMappedManufacturerAttributes)) {
+                        $mappedAttributes['Manufacturer'] = $parentMappedManufacturerAttributes['Manufacturer'];
+                    }
+            }
         }
 
-        // Brand *R
-        if ($product->getBrand() !== null && $product->getAttributeText('brand')) {
-            $productXml->addChild('Brand', htmlspecialchars($product->getAttributeText('brand')));
-        }
+        foreach ($mappedAttributes as $attributeName => $attributes) {
+            $attributeText = $this->_getAttributesText(
+                0, // Language
+                array_keys($attributes)[0],
+                array_values($attributes)[0]
+            );
 
-        // Manufacturer *O
-        if ($product->getManufacturer() !== null && $product->getAttributeText('manufacturer')) {
-            $productXml->addChild('Manufacturer', htmlspecialchars($product->getAttributeText('manufacturer')));
+            if (!empty($attributeText)) {
+                $productXml->addChild(
+                    $attributeName,
+                    htmlspecialchars($attributeText)
+                );
+            }
         }
 
         // Category *R
@@ -293,8 +344,17 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
                 ->addAttributeToFilter('is_active', '1')
                 ->getFirstItem();
 
-        if ($categoryEntity->getName() !== null) {
-            $productXml->addChild('Category', htmlspecialchars($categoryEntity->getName()));
+        $categories = array();
+
+        // Get parent category for each category until the root catalog
+        while (isset($categoryEntity) && $categoryEntity->getName() !== null && $categoryEntity->getName() !== 'Root Catalog') {
+            array_push($categories, $categoryEntity->getName());
+            $categoryEntity = $categoryEntity->getParentCategory();
+        }
+
+        if (!empty($categories)) {
+            // Top level category comes first
+            $productXml->addChild('Category', htmlspecialchars(implode('>', array_reverse($categories))));
         }
 
         // Imageurl1 *M
@@ -315,8 +375,10 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 
         if ($stockItem === null || !$stockItem->getIsInStock()) {
             $productXml->addChild('StockStatus', 'OUTOFSTOCK');
+            $productXml->addChild('StockQuantity', 0);
         } else {
             $stocklevel = (int)$stockItem->getQty();
+
             if ($stocklevel <= 0) {
                 $productXml->addChild('StockStatus', 'OUTOFSTOCK');
                 $productXml->addChild('StockQuantity', 0);
@@ -354,26 +416,54 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 
             // Make sure product has description based on store config
             $descriptionType = Mage::getStoreConfig('integration_options/products_options/descrption_type', $store);
-            $descriptionsArray = Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), array(
-                'description',
-                'short_description',
-            ), $store->getId());
-
-            // This is a workaround for a bug in getAttributeRawValue which returns the wrong values for product attributes that have been
-            // modified in another site so to save db hits we try and get them and if they differ from the main product we are processing we
-            // then load them individually
-            if (isset($descriptionsArray['description']) && ($product->getDescription() != $descriptionsArray['description'])) {
-                $descriptionsArray['description'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'description', $store->getId());
-            }
-
-            if (isset($descriptionsArray['short_description']) && ($product->getShortDescription() != $descriptionsArray['short_description'])) {
-                $descriptionsArray['short_description'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'short_description', $store->getId());
-            }
 
             // check product description not null for each store
-            if ($descriptionType == 'long' && $descriptionsArray['description'] === null) {
+            $descriptionsArray = array();
+
+            foreach ($this->descriptionAttributes['AttributeDescription'] as $attributeName) {
+                $descriptionValue = null;
+
+                if ($attributeName && $product->getData($attributeName)) {
+                    $descriptionValue = Mage::getResourceModel('catalog/product')
+                        ->getAttributeRawValue($product->getId(), $attributeName, $store->getId());
+                }
+
+                // use parent description if empty
+                if ($descriptionValue == null && isset($parentProduct)) {
+                    $descriptionValue = Mage::getResourceModel('catalog/product')
+                        ->getAttributeRawValue($parentProduct->getId(), $attributeName, $store->getId());
+                }
+
+                if (!empty($descriptionValue)) {
+                    $descriptionsArray['description'] = $descriptionValue;
+                    break;
+                }
+            }
+
+            foreach ($this->descriptionAttributes['AttributeShortDescription'] as $attributeName) {
+                $shortDescriptionValue = null;
+
+                if ($attributeName && $product->getData($attributeName)) {
+                    $shortDescriptionValue = Mage::getResourceModel('catalog/product')
+                        ->getAttributeRawValue($product->getId(), $attributeName, $store->getId());
+                }
+
+                // use parent short description if empty
+                if ($shortDescriptionValue == null && isset($parentProduct)) {
+                    $shortDescriptionValue = Mage::getResourceModel('catalog/product')
+                        ->getAttributeRawValue($parentProduct->getId(), $attributeName, $store->getId());
+                }
+
+                if (!empty($shortDescriptionValue)) {
+                    $descriptionsArray['short_description'] = $shortDescriptionValue;
+                    break;
+                }
+            }
+
+            // Check product description not null for each store
+            if ($descriptionType == 'long' && empty($descriptionsArray['description'])) {
                 continue;
-            } elseif ($descriptionType == 'short' && $descriptionsArray['short_description'] === null) {
+            } elseif ($descriptionType == 'short' && empty($descriptionsArray['short_description'])) {
                 continue;
             }
 
@@ -382,42 +472,6 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
                 // Language *R
                 $descriptionXml = $productXml->addChild('Description');
                 $descriptionXml->addChild('Language', $language);
-
-                $attributes = Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), array(
-                    'shoe_size',
-                    'size',
-                    'color',
-                    'fit',
-                    'length',
-                    'width',
-                ), $store->getId());
-
-                // This is a workaround for a bug in getAttributeRawValue which returns the wrong values for product attributes that have been
-                // modified in another site so to save db hits we try and get them and if they differ from the main product we are processing we
-                // then load them individually
-                if (isset($attributes['fit']) && ($product->getFit() != $attributes['fit'])) {
-                    $attributes['fit'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'fit', $store->getId());
-                }
-
-                if (isset($attributes['color']) && ($product->getColor() != $attributes['color'])) {
-                    $attributes['color'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'color', $store->getId());
-                }
-
-                if (isset($attributes['size']) && ($product->getSize() != $attributes['size'])) {
-                    $attributes['size'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'size', $store->getId());
-                }
-
-                if (isset($attributes['shoe_size']) && ($product->getShoe_size() != $attributes['shoe_size'])) {
-                    $attributes['shoe_size'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'shoe_size', $store->getId());
-                }
-
-                if (isset($attributes['length']) && ($product->getLength() != $attributes['length'])) {
-                    $attributes['length'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'length', $store->getId());
-                }
-
-                if (isset($attributes['width']) && ($product->getWidth() != $attributes['width'])) {
-                    $attributes['width'] =  Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'width', $store->getId());
-                }
 
                 // title
                 if (isset($parentProduct)) {
@@ -440,28 +494,7 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
                     $this->_addCData($nestedDescriptionXml, $descriptionsArray['description'] . PHP_EOL . $descriptionsArray['short_description']);
                 }
 
-                 // AttributeColor *R
-                if (!empty($attributes['color'])) {
-                    $descriptionXml->addChild('AttributeColor', $this->_getAttributesText($language, 'color', $attributes['color'], $store->getId()));
-                }
-
-                // AttributeSize *R
-                if (!empty($attributes['shoe_size'])) {
-                    $descriptionXml->addChild('AttributeSize', $this->_getAttributesText($language, 'shoe_size', $attributes['shoe_size'], $store->getId()));
-                } elseif (!empty($attributes['size'])) {
-                    $descriptionXml->addChild('AttributeSize', $this->_getAttributesText($language, 'size', $attributes['size'], $store->getId()));
-                }
-
-                // optional attributes: Arrtibute1 - Attribute10 *O
-                if (!empty($attributes['fit'])) {
-                    $descriptionXml->addChild('Attribute1', $this->_getAttributesText($language, 'fit', $attributes['fit'], $store->getId()));
-                }
-                if (!empty($attributes['length'])) {
-                    $descriptionXml->addChild('Attribute2', $this->_getAttributesText($language, 'length', $attributes['length'], $store->getId()));
-                }
-                if (!empty($attributes['width'])) {
-                    $descriptionXml->addChild('Attribute3', $this->_getAttributesText($language, 'width', $attributes['width'], $store->getId()));
-                }
+                $this->_addAttributesXml($descriptionXml, $product, $store, $language);
 
                 array_push($addedLanguages, $language);
                 $descriptionNodeCount++;
@@ -572,6 +605,70 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         return $productStr;
     }
 
+    protected function _getMappedProductAttributes($attributes, $product, $store = false)
+    {
+        // Check that at least one attribute is mapped
+        if (!$attributes = array_filter($attributes)) {
+            return array();
+        }
+
+        // Create a flat array of attribute names, and remove duplicates, and
+        // find the product's attribute values for each
+        $iterableAttributes = array_unique(call_user_func_array('array_merge', $attributes));
+
+        $foundAttributes = $this->_getAttributes(
+            $product,
+            $iterableAttributes,
+            $store ? $store->getId() : 0
+        );
+
+        // Map the attributes found for the product with the configured
+        // configured Fruugo attributes
+        $mappedAttributes = array();
+
+        foreach ($attributes as $key => $attributeNames) {
+            if (!$attributeNames) {
+                continue;
+            }
+
+            foreach ($attributeNames as $attributeName) {
+                // Skip if the attribute isn't defined for the product
+                if (!isset($foundAttributes[$attributeName])) {
+                    continue;
+                }
+
+                $mappedAttributes[$key][$attributeName] = $foundAttributes[$attributeName];
+            }
+        }
+
+        return $mappedAttributes;
+    }
+
+    protected function _addAttributesXml($descriptionXml, $product, $store, $language)
+    {
+        $mappedAttributes = $this->_getMappedProductAttributes(
+            $this->attributes,
+            $product,
+            $store
+        );
+
+        foreach ($mappedAttributes as $attributeName => $attributes) {
+            $attributeText = $this->_getAttributesText(
+                $language,
+                array_keys($attributes)[0],
+                array_values($attributes)[0],
+                $store->getId()
+            );
+
+            if (!empty($attributeText)) {
+                $descriptionXml->addChild(
+                    $attributeName,
+                    htmlspecialchars($attributeText)
+                );
+            }
+        }
+    }
+
     protected function _convertCurrency($price, $baseCurrencyCode, $currencyCode)
     {
         if ($this->shouldConvertCurrency && $baseCurrencyCode != $currencyCode) {
@@ -587,7 +684,7 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 
     // This caches the options label translation for selectable product attributes.
     // They are cached by attribute name, language and then value.
-    protected function _getAttributesText($language, $attributeName, $optionId, $storeId)
+    protected function _getAttributesText($language, $attributeName, $optionId, $storeId = 0)
     {
         // These are the asset keys that are cached, you should only cache attributes
         // that have selectable items
@@ -600,21 +697,29 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
             );
         }
 
+        // Creates attribute array if not present
         if (!isset($this->attributeMap[$attributeName])) {
-            return $optionId;
+            $this->attributeMap[$attributeName] = array();
         }
 
+        // Creates language array if not present
         if (!isset($this->attributeMap[$attributeName][$language])) {
             $this->attributeMap[$attributeName][$language] = array();
         }
 
         if (!isset($this->attributeMap[$attributeName][$language][$optionId])) {
+            // Set the option value to null if it's not yet cached
             $this->attributeMap[$attributeName][$language][$optionId] = null;
         } else {
+            // Return the option value if it's already cached
             return $this->attributeMap[$attributeName][$language][$optionId];
         }
 
-        $attributeId = Mage::getResourceModel('eav/entity_attribute')->getIdByCode('catalog_product', $attributeName);
+        // Find the attribute id for given attribute name
+        $attributeId = Mage::getResourceModel('eav/entity_attribute')
+            ->getIdByCode('catalog_product', $attributeName);
+
+        // Find all availble attribute options for the given attribute and store id
         $collection = Mage::getResourceModel('eav/entity_attribute_option_collection')
             ->setPositionOrder('asc')
             ->setAttributeFilter($attributeId)
@@ -622,6 +727,7 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
             ->load()
             ->toOptionArray();
 
+        // Cache attribute values
         $found = false;
         foreach ($collection as $option) {
             if ($option['value'] == $optionId) {
@@ -631,14 +737,46 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
             $this->attributeMap[$attributeName][$language][$option['value']] = $option['label'];
         }
 
+        // Return option id if option value isn't found
         if (!$found) {
             return $optionId;
         }
 
+        // Return the option value
         return $this->attributeMap[$attributeName][$language][$optionId];
     }
 
-    protected $tempProductObj = false;
+    protected function _getAttributes($product, $attributes, $storeId = 0)
+    {
+        $attributeValues = [];
+
+        // Looping through $attributes arary rather than passing the it directly to getAttributeRawValue
+        // Reason is: getAttributeRawValue returns array if $attributes has more than 1 attribute, but it returns string
+        // if there is only on attribute in $attributes.
+        // This make sure we always got an array
+        foreach ($attributes as $attribute) {
+            $attributeValue = Mage::getResourceModel('catalog/product')
+                ->getAttributeRawValue($product->getId(), $attribute, $storeId);
+
+            $attributeValues[$attribute] = $attributeValue;
+        }
+
+        // This is a workaround for a bug in getAttributeRawValue which returns
+        // the wrong values for product attributes that have been modified in
+        // another site so to save db hits we try and get them and if they
+        // differ from the main product we are processing we then load them
+        // individually
+        foreach ($attributes as $name) {
+            if (isset($attributeValues[$name])
+                && ($product->getData($name) != $attributeValues[$name])) {
+                $attributeValues[$name] = Mage::getResourceModel('catalog/product')
+                    ->getAttributeRawValue($product->getId(), $name, $storeId);
+            }
+        }
+
+        return $attributeValues;
+    }
+
     protected function _getProductImages($product, $parentProduct)
     {
         if (!isset($this->tempProductObj) || $this->tempProductObj === false) {
@@ -709,15 +847,68 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 
     protected function _shouldInclude($product)
     {
-        if ($product->getSku() === null || $product->getName() === null || $product->getPrice() === null) {
+        if ($product->getName() === null || $product->getPrice() === null) {
             return false;
         }
 
-        if ($product->getDescription() === null && $product->getShortDescription() === null) {
-            return false;
+        // Check if any mapped product desscription attribute is set
+        $hasDescription = null;
+        foreach (($this->descriptionAttributes['AttributeDescription'] ?: []) as $attributeName) {
+            if (!$product->getData($attributeName)) {
+                $hasDescription = false;
+            } else {
+                $hasDescription = true;
+            }
         }
 
-        return true;
+        $parentProduct = null;
+        // If no description, check parent
+        if (!$hasDescription) {
+            $parentProduct = $this->_getParentProduct($product);
+
+            if (isset($parentProduct)) {
+                foreach (($this->descriptionAttributes['AttributeDescription'] ?: []) as $attributeName) {
+                    $description = Mage::getResourceModel('catalog/product')
+                        ->getAttributeRawValue($parentProduct->getId(), $attributeName, 0);
+
+                    if (!empty($description)) {
+                        $hasDescription = true;
+                    } else {
+                        $hasDescription = false;
+                    }
+                }
+            }
+        }
+
+        // Check if any mapped product short desscription attribute is set
+        $hasShortDescription = null;
+        foreach (($this->descriptionAttributes['AttributeShortDescription'] ?: []) as $attributeName) {
+            if (!$product->getData($attributeName)) {
+                $hasShortDescription = false;
+            } else {
+                $hasShortDescription = true;
+            }
+        }
+
+        // If no short description, check parent
+        if (!$hasShortDescription) {
+            $parentProduct = $parentProduct == null ? $this->_getParentProduct($product) : $parentProduct;
+
+            if (isset($parentProduct)) {
+                foreach (($this->descriptionAttributes['AttributeShortDescription'] ?: []) as $attributeName) {
+                    $shortDescription = Mage::getResourceModel('catalog/product')
+                        ->getAttributeRawValue($parentProduct->getId(), $attributeName, 0);
+
+                    if (!empty($shortDescription)) {
+                        $hasShortDescription = true;
+                    } else {
+                        $hasShortDescription = false;
+                    }
+                }
+            }
+        }
+
+        return ($hasDescription || $hasShortDescription);
     }
 
     protected function _getParentProduct($product)
@@ -739,7 +930,7 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
     {
         $node = dom_import_simplexml($xml);
         $no   = $node->ownerDocument;
-        $node->appendChild($no->createCDATASection(htmlspecialchars($cdata_text)));
+        $node->appendChild($no->createCDATASection(htmlspecialchars($cdata_text, ENT_COMPAT | ENT_HTML401 | ENT_DISALLOWED)));
         return $xml;
     }
 
@@ -750,7 +941,46 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
 
     protected function _writeReport($report)
     {
-        file_put_contents($this->reportPath, json_encode($report));
+        $reportsToWrite = array();
+
+        if (file_exists($this->reportPath)) {
+            $existingReportsArray = array();
+            $existingReport = json_decode(file_get_contents($this->reportPath));
+
+            if (!is_array($existingReport)) {
+                // If a report object has already been generated before, add it to a new array
+                array_push($existingReportsArray, $existingReport);
+            } else {
+                // Otherwise let the new array = existing reports array
+                $existingReportsArray = $existingReport;
+            }
+
+            $numberOfExistingReports = count($existingReportsArray);
+
+            if ($numberOfExistingReports == $this->NUMBER_OF_REPORTS_TO_KEEP) {
+                // Remove first report in array
+                array_shift($existingReportsArray);
+            } else if ($numberOfExistingReports > $this->NUMBER_OF_REPORTS_TO_KEEP) {
+                // If eixsting reports are more than number to keep (most likely NUMBER_OF_REPORTS_TO_KEEP is
+                // changed to a smaller value), remove the difference and add 1 in order to add one more report
+                $numOfReportsToRemoveBackwards = -$this->NUMBER_OF_REPORTS_TO_KEEP + 1;
+                // array_splice: If length is given and is negative then the sequence will stop that many elements from the end of the array
+                if ($numOfReportsToRemoveBackwards == 0) {
+                    // Remove all
+                    array_splice($existingReportsArray, 0);
+                } else {
+                    array_splice($existingReportsArray, 0, $numOfReportsToRemoveBackwards);
+                }
+            }
+
+            // Add new report to array
+            array_push($existingReportsArray, $report);
+            $reportsToWrite = $existingReportsArray;
+        } else {
+            array_push($reportsToWrite, $report);
+        }
+
+        file_put_contents($this->reportPath, json_encode($reportsToWrite));
     }
 
     protected function _writeLog($message, $level = Fruugo_Integration_Helper_Logger::DEBUG)
@@ -769,9 +999,10 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         }
 
         $this->PAGE_SIZE = Mage::getStoreConfig('integration_options/products_options/export_page_size');
-        $this->MAX_RESOURCES = Mage::getStoreConfig('integration_options/products_options/max_resources_load');
-        $this->SLEEP_TIME_SEC = Mage::getStoreConfig('integration_options/products_options/sleep_time_sec');
-        $this->MAX_ERRORS = Mage::getStoreConfig('integration_options/products_options/max_errors');
+        $this->MAX_RESOURCES = Mage::getStoreConfig('integration_options/products_feed_advanced_options/max_resources_load');
+        $this->SLEEP_TIME_SEC = Mage::getStoreConfig('integration_options/products_feed_advanced_options/sleep_time_sec');
+        $this->MAX_ERRORS = Mage::getStoreConfig('integration_options/products_feed_advanced_options/max_errors');
+        $this->NUMBER_OF_REPORTS_TO_KEEP = Mage::getStoreConfig('integration_options/products_feed_advanced_options/performance_reports_to_keep');
 
         $this->taxHelper = Mage::helper('tax');
         $this->currencyConverter = Mage::helper('directory');
@@ -795,14 +1026,75 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
             'time_paused_sec' => 0,
             'xml_file_size_mb' => 0,
         );
+
+        $this->_setupAttributeMappings();
+    }
+
+    protected function _setupAttributeMappings()
+    {
+        // Check that attributes are configured
+        if (Mage::getStoreConfig('integration_options/products_options/attribute_description') === null
+            && Mage::getStoreConfig('integration_options/products_options/attribute_short_description') === null) {
+            $this->_writeLog(
+                'Did not start Fruugo products export because attribute mappings have not been configured.',
+                self::$WARNING
+            );
+
+            die('FuugoMagentoProductsFeed: Attribute mappings not configured');
+        }
+
+        // Create an array from all configuration values
+        $this->attributes = array(
+            'AttributeColor' => $this->_getAttributeConfig('attribute_color'),
+            'AttributeSize'  => $this->_getAttributeConfig('attribute_size'),
+            'Attribute1'     => $this->_getAttributeConfig('attribute_1'),
+            'Attribute2'     => $this->_getAttributeConfig('attribute_2'),
+            'Attribute3'     => $this->_getAttributeConfig('attribute_3'),
+            'Attribute4'     => $this->_getAttributeConfig('attribute_4'),
+            'Attribute5'     => $this->_getAttributeConfig('attribute_5'),
+            'Attribute6'     => $this->_getAttributeConfig('attribute_6'),
+            'Attribute7'     => $this->_getAttributeConfig('attribute_7'),
+            'Attribute8'     => $this->_getAttributeConfig('attribute_8'),
+            'Attribute9'     => $this->_getAttributeConfig('attribute_9'),
+            'Attribute10'    => $this->_getAttributeConfig('attribute_10')
+        );
+
+        $this->descriptionAttributes = array(
+            'AttributeDescription'      => $this->_getAttributeConfig('attribute_description'),
+            'AttributeShortDescription' => $this->_getAttributeConfig('attribute_short_description'),
+        );
+        $this->brandAttributes = $this->_getAttributeConfig('brand');
+        $this->manufacturerAttributes = $this->_getAttributeConfig('manufacturer');
+        $this->eanAttributes = $this->_getAttributeConfig('ean');
+        $this->isbnAttributes = $this->_getAttributeConfig('isbn');
+    }
+
+    protected function _getAttributeConfig($handle)
+    {
+        // Configuration path prefix
+        $p = 'integration_options/products_options';
+
+        // Find the configuration value and deserealize into an array
+        $attributes = unserialize(Mage::getStoreConfig("{$p}/{$handle}"));
+
+        // Sort the values by priority
+        if (!$attributes) {
+            return;
+        }
+
+        usort($attributes, function ($a, $b) {
+            return (int)$a['priority'] - (int)$b['priority'];
+        });
+
+        return array_filter(array_map(function ($x) {
+            return $x['attribute'];
+        }, $attributes));
     }
 
     // This monitors system resources and pauses execution if the utilisation is
     // above the configured threshold.
     // Recommended for systems with large numbers of products
     // Note: this feature is not available on windows servers.
-    protected $loadCheckCount = 0;
-    protected $loadCheckTotal = 0.0;
     protected function checkServerLoad()
     {
         if (stristr(PHP_OS, 'win')) {
@@ -823,7 +1115,7 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         }
 
         $systemLoad = sys_getloadavg();
-        if ($this->devMode && $systemLoad[0] > $this->MAX_RESOURCES) {
+        if ($systemLoad[0] > $this->MAX_RESOURCES) {
             $this->_writeLog(
                 'High server load detected.  Usage of ' . $systemLoad[0] .
                 ' is greater than configured maximum of ' . $this->MAX_RESOURCES .
@@ -838,6 +1130,4 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
             $this->_writeLog('Fruugo export resumed after waiting ' . $this->SLEEP_TIME_SEC . ' seconds.', self::$DEBUG);
         }
     }
-
-
 }

@@ -30,6 +30,12 @@ use \DOMXpath as DOMXpath;
 
 class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
 {
+    protected static $ALWAYS = Fruugo_Integration_Helper_Logger::ALWAYS;
+    protected static $ERROR = Fruugo_Integration_Helper_Logger::ERROR;
+    protected static $WARNING = Fruugo_Integration_Helper_Logger::WARNING;
+    protected static $INFO = Fruugo_Integration_Helper_Logger::INFO;
+    protected static $DEBUG = Fruugo_Integration_Helper_Logger::DEBUG;
+
     public function processOrders($from = null)
     {
         $apiUrl = Fruugo_Integration_Helper_Defines::FRUUGO_ORDERS_ENDPOINT;
@@ -50,19 +56,26 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
             )
         ));
 
-        if (empty($from) || $from === null) {
+        if (empty($from)) {
             $from = Fruugo_Integration_Helper_ConfigLoader::load('integration_options/orders_options/orders_endpoint_last_checked');
-            if (empty($from) || $from === null) {
+            if (empty($from)) {
                 $from = new DateTime('NOW');
-                $from = $from->format(DateTime::ISO8601);
+            } else {
+                try {
+                    $from = new DateTime($from);
+                } catch (Exception $ex) {
+                    $this->_writeLog('Invalid $from paramter format. Value: ' . $from, self::$ERROR);
+                    $from = new DateTime('NOW');
+                }
             }
+
+            $from = $from->format(DateTime::ISO8601);
         }
 
         $apiUrl .= ("?from=".urlencode($from));
 
         try {
-            Fruugo_Integration_Helper_Logger::log("Getting new orders from Integration. From: " . $from);
-
+            $this->_writeLog("Getting new orders from Integration. From: " . $from, self::$ALWAYS);
             $data = @file_get_contents($apiUrl, false, $context);
 
             if ($data === false) {
@@ -82,12 +95,13 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
             $orders = $xpath->query('//o:order');
 
             if ($orders->length == 0) {
-                Fruugo_Integration_Helper_Logger::log('No new Fruugo orders to process.');
+                $this->_writeLog('No new Fruugo orders to process.', self::$WARNING);
             } else {
                 foreach ($orders as $orderXml) {
                     $this->_mapOrderFromXml($orderXml);
                 }
-                Fruugo_Integration_Helper_Logger::log("Processing new orders finished.");
+
+                $this->_writeLog('Processing new orders finished.', self::$ALWAYS);
             }
         } catch (Exception $ex) {
             Mage::logException($ex);
@@ -100,7 +114,7 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         $fruugoId = $orderArray['orderId'];
 
         if ($orderArray['orderStatus'] !== 'PENDING') {
-            Fruugo_Integration_Helper_Logger::log('Fruugo order ' . $fruugoId . ' status is not PENDING. Order skipped.');
+            $this->_writeLog('Fruugo order ' . $fruugoId . ' status is not PENDING. Order skipped.', self::$WARNING);
             return false;
         }
 
@@ -108,7 +122,8 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         $existingCount = $salesModel->getCollection()->addAttributeToFilter('fruugo_order_id', $fruugoId)->count();
 
         if ($existingCount > 0) {
-            Fruugo_Integration_Helper_Logger::log("The Fruugo order $fruugoId already exists and is being skipped");
+            // Fruugo_Integration_Helper_Logger::log();
+            $this->_writeLog("The Fruugo order $fruugoId already exists and is being skipped", self::$WARNING);
             return false;
         }
 
@@ -168,6 +183,7 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
             $quantity = $orderLine['totalNumberOfItems'];
 
             $quoteItem = $this->_mapLineItem($orderLine);
+
             if (!$quoteItem) {
                 // product does not exist any more, cancel this item
                 $orderItemsInfo .= '&item=' . $fruugoProductId.','
@@ -241,28 +257,170 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
                                     ->setIsVisibleOnFront(false)
                                     ->setIsCustomerNotified(false);
 
-        // if you don't save each order item, the fruugo_product_id and fruugo_sku_id will not be saved
         foreach ($order->getAllItems() as $orderItem) {
+            $orderItem->setBaseTaxBeforeDiscount(null);
+
+            // Save the order item so fruugo_product_id and fruugo_sku_id are persisted
             $orderItem->save();
+
+            // Override the order item's prices based on data from Fruugo
+            $this->_setOrderItemPrices($orderArray['orderLines'], $orderItem);
         }
 
+        // Override the order's prices based on data from Fruugo
+        $this->_setOrderPrices($orderArray['orderLines'], $order, $orderArray['shippingCostInclVAT']);
         $order->save();
 
-        // remove items from shopping cart
+        // Remove items from shopping cart
         $quote->removeAllItems();
         $quote->save();
 
         if (count($order->getAllItems()) == 0) {
-            $nonExistProductInfo = '';
             foreach ($orderArray['orderLines'] as $orderLine) {
                 $productId = $orderLine['productId'];
                 $productSku = $orderLine['skuId'];
                 $nonExistProductInfo .= "ProductId:{$productId}, Sku:{$productSku}";
+                $orderItemsInfo .= '&item=' . $orderLine['fruugoProductId'].','
+                            .$orderLine['fruugoSkuId'].','
+                            .(int)$orderLine['totalNumberOfItems'];
+                $this->cancelItemsOnProductNotExist($order, $fruugoId, $nonExistProductInfo, $orderItemsInfo, $orderLine['fruugoProductId']);
             }
-            $this->cancelItemsOnProductNotExist($order, $fruugoId, $nonExistProductInfo);
         } elseif (!empty($orderItemsInfo)) {
             $this->cancelItemsOnProductNotExist($order, $fruugoId, $nonExistProductInfo, $orderItemsInfo);
         }
+    }
+
+    protected function _setOrderPrices($orderLines, $order, $shippingCost)
+    {
+        // Set tax percentage to null, since we don't know it
+        $order->setTaxPercent(null);
+        $order->setBaseTaxPercent(null);
+
+        // Set subtotal
+        $subtotal = $this->_getOrderTotal($orderLines);
+
+        $order->setBaseSubtotal($subtotal);
+        $order->setSubtotal($subtotal);
+
+        // Set tax amount
+        $tax = $this->_getOrderTax($orderLines);
+
+        $order->setTaxAmount($tax);
+        $order->setBaseTaxAmount($tax);
+
+        // Set total
+        $total = $this->_getOrderTotal(
+            $orderLines,
+            $withTax = true,
+            $withShipping = $shippingCost
+        );
+
+        $order->setBaseGrandTotal($total);
+        $order->setGrandTotal($total);
+        $order->setBaseTotalDue($total);
+        $order->setTotalDue($total);
+    }
+
+    protected function _getOrderTax($orderLines)
+    {
+        return array_sum(array_map(function ($item) {
+            return $item['totalVat'];
+        }, $orderLines));
+    }
+
+    protected function _getOrderTotal($orderLines, $withTax = false, $withShipping = false)
+    {
+        $price = array_sum(array_map(function ($item) {
+            return $item['totalPriceInclVat'];
+        }, $orderLines));
+
+        if (!$withTax) {
+            $vat = array_sum(array_map(function ($item) {
+                return $item['totalVat'];
+            }, $orderLines));
+
+            $price = $price - $vat;
+        }
+
+        if ($withShipping) {
+            $price = $price + $withShipping;
+        }
+
+        return $price;
+    }
+
+    protected function _setOrderItemPrices($orderLines, $orderItem)
+    {
+        $orderLine = $this->_getOrderItemByFruugoSku($orderLines, $orderItem->getData('fruugo_sku_id'));
+
+        // Set unit price
+        $price = $this->_getOrderLinePrice($orderLine);
+
+        $orderItem->setBasePrice($price);
+        $orderItem->setPrice($price);
+        $orderItem->setBaseOriginalPrice($price);
+        $orderItem->setOriginalPrice($price);
+
+        // Set tax-inclusive unit price
+        $priceInclTax = $this->_getOrderLinePrice($orderLine, true);
+
+        $orderItem->setPriceInclTax($priceInclTax);
+        $orderItem->setBasePriceInclTax($priceInclTax);
+
+        // Set tax percentage
+        $orderItem->setTaxPercent($orderLine['vatPercentage']);
+        $orderItem->setBaseTaxPercent($orderLine['vatPercentage']);
+
+        // Set unit tax amount
+        $orderItem->setTaxAmount($orderLine['totalVat']);
+        $orderItem->setBaseTaxAmount($orderLine['totalVat']);
+
+        // Set total
+        $total = $this->_getOrderLineTotal($orderLine);
+
+        $orderItem->setBaseRowTotal($total);
+        $orderItem->setRowTotal($total);
+
+        // Set tax-inclusive total
+        $totalInclTax = $this->_getOrderLineTotal($orderLine, true);
+
+        $orderItem->setBaseRowTotalInclTax($totalInclTax);
+        $orderItem->setRowTotalInclTax($totalInclTax);
+    }
+
+    protected function _getOrderLinePrice($orderLine, $withTax = false)
+    {
+        $price = $orderLine['itemPriceInclVat'];
+
+        if (!$withTax) {
+            $price = $price - $orderLine['itemVat'];
+        }
+
+        return $price;
+    }
+
+    protected function _getOrderLineTotal($orderLine, $withTax = false)
+    {
+        $price = $orderLine['totalPriceInclVat'];
+
+        if (!$withTax) {
+            $price = $price - $orderLine['totalVat'];
+        }
+
+        return $price;
+    }
+
+    protected function _getOrderItemByFruugoSku($orderLines, $fruugoSku)
+    {
+        $orderItem;
+
+        foreach ($orderLines as $orderLine) {
+            if ($orderLine['fruugoSkuId'] == $fruugoSku) {
+                $orderItem = $orderLine;
+            };
+        }
+
+        return $orderItem;
     }
 
     private function _mapLineItem($orderLine)
@@ -345,7 +503,7 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         return implode($pass);
     }
 
-    private function cancelItemsOnProductNotExist($order, $fruugoId, $nonExistProductInfo, $orderItemsInfo = null)
+    private function cancelItemsOnProductNotExist($order, $fruugoId, $nonExistProductInfo, $orderItemsInfo = null, $fruugoProductId = null)
     {
         $observer = new Fruugo_Integration_Model_Observer;
         $data = array();
@@ -357,6 +515,12 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
             if (strpos($apiUrl, '127.0.0.1')) {
                 $data['mock_api_operation'] = 'cancel';
                 $data['orderId'] = $fruugoId;
+
+                if ($fruugoProductId) {
+                    $data['mock_api_operation'] = 'cancel_item';
+                    $data['orderId'] = $fruugoId;
+                    $data['fruugoProductId'] = $fruugoProductId;
+                }
             }
         }
 
@@ -376,5 +540,10 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         } else {
             $observer->_saveHistoryComment($order, "Failed to send notification to Fruugo of cancellation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
         }
+    }
+
+    protected function _writeLog($message, $level = Fruugo_Integration_Helper_Logger::DEBUG)
+    {
+        Fruugo_Integration_Helper_Logger::log($message, $level);
     }
 }

@@ -113,7 +113,7 @@
                             <label>Langage Store Mapping</label>
                             <frontend_model>Fruugo_Integration_Block_Languagestoremapping</frontend_model>
                             <backend_model>adminhtml/system_config_backend_serialized_array</backend_model>
-                            <sort_order>50</sort_order>
+                            <sort_order>40</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
@@ -123,42 +123,192 @@
                             <label>Export Page Size</label>
                             <frontend_type>select</frontend_type>
                             <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_ExportPageSize</source_model>
-                            <sort_order>60</sort_order>
+                            <sort_order>50</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>0</show_in_website>
                             <show_in_store>0</show_in_store>
                             <comment>The number of products to process and write to xml per batch.</comment>
                         </export_page_size>
-                        <max_resources_load translate="label">
-                            <label>Max Resources</label>
-                            <frontend_type>select</frontend_type>
-                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_MaxResourcesLoad</source_model>
+                        <attribute_description translate="label">
+                            <label>Description Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>60</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the description of an item</comment>
+                        </attribute_description>
+                        <attribute_short_description translate="label">
+                            <label>Short Description Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
                             <sort_order>70</sort_order>
                             <show_in_default>1</show_in_default>
-                            <show_in_website>0</show_in_website>
-                            <show_in_store>0</show_in_store>
-                            <comment>Maximum average system load (the number of processes in the system run queue, based on /proc/loadavg) allowed over the last minute, not available on Windows Servers because php sys_getloadavg() function is not implemented on Windows platforms.</comment>
-                        </max_resources_load>
-                        <sleep_time_sec translate="label">
-                            <label>Sleep time seconds</label>
-                            <frontend_type>select</frontend_type>
-                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_SleepTimeSec</source_model>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the short description of an item</comment>
+                        </attribute_short_description>
+                        <attribute_size translate="label">
+                            <label>Size Attribute Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
                             <sort_order>80</sort_order>
                             <show_in_default>1</show_in_default>
-                            <show_in_website>0</show_in_website>
-                            <show_in_store>0</show_in_store>
-                            <comment>Time to sleep for if over load limit during products export</comment>
-                        </sleep_time_sec>
-                        <max_errors translate="label">
-                            <label>Max Errors Allowed</label>
-                            <frontend_type>select</frontend_type>
-                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_MaxErrors</source_model>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the size of an item</comment>
+                        </attribute_size>
+                        <attribute_color translate="label">
+                            <label>Color Attribute Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
                             <sort_order>90</sort_order>
                             <show_in_default>1</show_in_default>
-                            <show_in_website>0</show_in_website>
-                            <show_in_store>0</show_in_store>
-                            <comment>The number of errors after which the exporting products process will abort, set to -1 to disable</comment>
-                        </max_errors>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the color of an item</comment>
+                        </attribute_color>
+                        <brand translate="label">
+                            <label>Brand Attribute Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMappingFiltered</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>100</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the brand of an item</comment>
+                        </brand>
+                        <manufacturer translate="label">
+                            <label>Manufacturer Attribute Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>110</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the manufacturer of an item</comment>
+                        </manufacturer>
+                        <ean translate="label">
+                            <label>EAN</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>120</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the manufacturer of an item</comment>
+                        </ean>
+                        <isbn translate="label">
+                            <label>ISBN</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>140</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the manufacturer of an item</comment>
+                        </isbn>
+                        <attribute_1 translate="label">
+                            <label>Custom Attribute 1 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>150</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 1 of an item</comment>
+                        </attribute_1>
+                        <attribute_2 translate="label">
+                            <label>Custom Attribute 2 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>160</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 2 of an item</comment>
+                        </attribute_2>
+                        <attribute_3 translate="label">
+                            <label>Custom Attribute 3 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>170</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 3 of an item</comment>
+                        </attribute_3>
+                        <attribute_4 translate="label">
+                            <label>Custom Attribute 4 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>180</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 4 of an item</comment>
+                        </attribute_4>
+                        <attribute_5 translate="label">
+                            <label>Custom Attribute 5 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>190</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 5 of an item</comment>
+                        </attribute_5>
+                        <attribute_6 translate="label">
+                            <label>Custom Attribute 6 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>200</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 6 of an item</comment>
+                        </attribute_6>
+                        <attribute_7 translate="label">
+                            <label>Custom Attribute 7 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>210</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 7 of an item</comment>
+                        </attribute_7>
+                        <attribute_8 translate="label">
+                            <label>Custom Attribute 8 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>220</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 8 of an item</comment>
+                        </attribute_8>
+                        <attribute_9 translate="label">
+                            <label>Custom Attribute 9 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>240</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 9 of an item</comment>
+                        </attribute_9>
+                        <attribute_10 translate="label">
+                            <label>Custom Attribute 10 Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_AttributeMapping</frontend_model>
+                            <backend_model>integration/AttributeMapping</backend_model>
+                            <sort_order>250</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Select attributes which describes the custom attribute 10 of an item</comment>
+                        </attribute_10>
                     </fields>
                 </products_options>
                 <orders_options translate="label" module="integration">
@@ -221,14 +371,65 @@
                             <comment>Fruugo Orders Api for testing</comment>
                         </order_api_url>
                         <orders_endpoint_last_checked translate="label">
-                            <frontend_type>hidden</frontend_type>
+                            <label>Fruugo orders endpoint last checked time</label>
+                            <frontend_type>text</frontend_type>
                             <sort_order>70</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
+                            <comment>Set the value of the last time when orders endpoint was checked. Format: yyyy-MM-ddThh:mm:ss+0000, where 0000 is timezone info</comment>
                         </orders_endpoint_last_checked>
                     </fields>
                 </orders_options>
+                <products_feed_advanced_options translate="label" module="integration">
+                    <label>Products Feed Advanced Options</label>
+                    <sort_order>4000</sort_order>
+                    <show_in_default>1</show_in_default>
+                    <show_in_website>1</show_in_website>
+                    <show_in_store>1</show_in_store>
+                    <fields>
+                        <max_resources_load translate="label">
+                            <label>Max Resources</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_MaxResourcesLoad</source_model>
+                            <sort_order>10</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>Maximum average system load (the number of processes in the system run queue, based on /proc/loadavg) allowed over the last minute, not available on Windows Servers because php sys_getloadavg() function is not implemented on Windows platforms.</comment>
+                        </max_resources_load>
+                        <sleep_time_sec translate="label">
+                            <label>Sleep time seconds</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_SleepTimeSec</source_model>
+                            <sort_order>20</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>Time to sleep for if over load limit during products export</comment>
+                        </sleep_time_sec>
+                        <max_errors translate="label">
+                            <label>Max Errors Allowed</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_MaxErrors</source_model>
+                            <sort_order>30</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>The number of errors after which the exporting products process will abort, set to -1 to disable</comment>
+                        </max_errors>
+                        <performance_reports_to_keep translate="label">
+                            <label>Number of Performance Reports to Keep</label>
+                            <frontend_type>select</frontend_type>
+                            <source_model>Fruugo_Integration_Model_Adminhtml_System_Config_Source_NumberOfPerformanceReports</source_model>
+                            <sort_order>40</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>0</show_in_website>
+                            <show_in_store>0</show_in_store>
+                            <comment>The number of products xml feed performance reports to keep. Reports can be downloaded at RootUrl/index.php/fruugo-integration/products/performancereport.</comment>
+                        </performance_reports_to_keep>
+                    </fields>
+                </products_feed_advanced_options>
             </groups>
         </integration_options>
     </sections>

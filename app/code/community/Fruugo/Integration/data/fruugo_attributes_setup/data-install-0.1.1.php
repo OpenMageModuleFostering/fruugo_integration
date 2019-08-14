@@ -26,6 +26,24 @@ require_once Mage::getModuleDir('', 'Fruugo_Integration') . '/Helper/FruugoCount
 
 try {
     Fruugo_Integration_Helper_Logger::log('Running Fruugo plugin data script.');
+    // clear left files from last installation
+    $filesToRemove = array(
+        '/controllers/products.lock',
+        '/controllers/report.json',
+        '/controllers/tmp_products.xml',
+        '/controllers/products.xml',
+        '/controllers/.DS_Store',
+        '/'. Fruugo_Integration_Helper_Defines::FRUUGO_COUNTRIES_FILE_NAME,
+    );
+
+    foreach ($filesToRemove as $filename) {
+        $file =  Mage::getModuleDir('', 'Fruugo_Integration') . $filename;
+
+        if (file_exists($file)) {
+            unlink($file);
+        }
+    }
+
     // create a new store for Fruugo orders
     Mage::registry('isSecureArea');
     $website_id = Mage::app()->getWebsite()->getId();

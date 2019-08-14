@@ -29,6 +29,12 @@ use \DOMXpath as DOMXpath;
 
 class Fruugo_Integration_Model_Observer
 {
+    protected static $ALWAYS = Fruugo_Integration_Helper_Logger::ALWAYS;
+    protected static $ERROR = Fruugo_Integration_Helper_Logger::ERROR;
+    protected static $WARNING = Fruugo_Integration_Helper_Logger::WARNING;
+    protected static $INFO = Fruugo_Integration_Helper_Logger::INFO;
+    protected static $DEBUG = Fruugo_Integration_Helper_Logger::DEBUG;
+
     public function beforeSaveOrder(Varien_Event_Observer $observer)
     {
         try {
@@ -36,34 +42,44 @@ class Fruugo_Integration_Model_Observer
             $order = $event->getOrder();
             $fruugoId = $order->getFruugoOrderId();
 
-            if (!empty($fruugoId) && $fruugoId !== null) {
-                $existingStatus = null;
-                $orderId = $order->getId();
-                if (!empty($orderId) && $orderId !== 0) {
-                    $origData = $order->getOrigData();
-                }
+            if (empty($fruugoId) && $fruugoId === null) {
+                $message = "Cannot process order, no fruugoId found for order: " . $order->getId();
+                $this->_writeLog($message, self::$ERROR);
+                throw new Exception($message);
+            }
+
+            if ($order->getStatus() == 'canceled') {
+                $this->beforeCancelOrder($order, $fruugoId);
+            }
+
+            // When creating credit memo, order status changes to "processing"
+            if ($order->getStatus() == 'processing') {
+                $this->beforeSaveRefund($order, $fruugoId);
             }
         } catch (Exception $ex) {
             Mage::logException($ex);
+            Mage::getSingleton('core/session')->addError($ex->getMessage());
+            throw $ex;
         }
     }
 
-    public function orderInvoiced(Varien_Event_Observer $observer)
+    public function beforeSaveInvoice(Varien_Event_Observer $observer)
     {
         $apiUrl = Fruugo_Integration_Helper_Defines::FRUUGO_ORDERS_ENDPOINT;
+
         try {
             $event = $observer->getEvent();
             $invoice = $observer->getEvent()->getInvoice();
             $order = $invoice->getOrder();
             $fruugoId = $order->getFruugoOrderId();
 
-            if (!empty($fruugoId) && $fruugoId !== null) {
+            if (!empty($fruugoId) && $fruugoId !== null && $order->getStatus() == 'pending') {
                 $data = array();
                 $devMode = Mage::getStoreConfig('integration_options/orders_options/dev_mode');
 
                 $postFields = 'orderId='.$fruugoId;
 
-                Fruugo_Integration_Helper_Logger::log("Invoice created for Fruugo order {$fruugoId}");
+                $this->_writeLog("Creating invoice Fruugo order {$fruugoId}", self::$ALWAYS);
 
                 $itemsInvoiced = $invoice->getAllItems();
                 foreach ($itemsInvoiced as $invoiceItem) {
@@ -89,38 +105,41 @@ class Fruugo_Integration_Model_Observer
                 list($httpcode, $response) = $this->_sendToApi($apiUrl, $data);
 
                 if ($httpcode == 200) {
-                    $this->_saveHistoryComment($order, "Sent confirmation to Fruugo of order {$fruugoId}. Details: {$postFields}.");
-                    Fruugo_Integration_Helper_Logger::log("Sent confirmation to Fruugo of order {$fruugoId}. Details: {$postFields}.");
+                    $message = "Sent confirmation to Fruugo of order {$fruugoId}. Details: {$postFields}.";
+                    $this->_saveHistoryComment($order, $message);
+                    $this->_writeLog("Invoice created for Fruugo order {$fruugoId}", self::$ALWAYS);
+                    $this->_writeLog($message, self::$INFO);
                 } else {
-                    $this->_saveHistoryComment($order, "Failed to send notification to Fruugo of confirmation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
-                    Fruugo_Integration_Helper_Logger::log("Failed to send notification to Fruugo of confirmation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
+                    $message = "Failed to send notification to Fruugo of confirmation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}";
+                    $this->_writeLog($message, self::$ERROR);
+                    throw new Exception($message);
                 }
             }
-
         } catch (Exception $ex) {
             Mage::logException($ex);
+            // Throw exception to stop invoice/order save
+            Mage::getSingleton('core/session')->addError($message);
+            throw $ex;
         }
     }
 
-    public function orderCancelled(Varien_Event_Observer $observer)
+    public function beforeCancelOrder($order, $fruugoId)
     {
         $apiUrl = Fruugo_Integration_Helper_Defines::FRUUGO_ORDERS_ENDPOINT;
         try {
-            $event = $observer->getEvent();
-            $orderItem = $event->getItem();
-            $order = $orderItem->getOrder();
-            $fruugoId = $order->getFruugoOrderId();
+            $data = array();
+            $devMode = Mage::getStoreConfig('integration_options/orders_options/dev_mode');
 
-            if (!empty($fruugoId) && $fruugoId !== null) {
-                $data = array();
-                $devMode = Mage::getStoreConfig('integration_options/orders_options/dev_mode');
+            if ($devMode == '1') {
+                $apiUrl = Mage::getStoreConfig('integration_options/orders_options/order_api_url');
+            }
 
+            foreach ($order->getAllItems() as $orderItem) {
                 if ($devMode == '1') {
-                    $apiUrl = Mage::getStoreConfig('integration_options/orders_options/order_api_url');
-
                     if (strpos($apiUrl, '127.0.0.1')) {
-                        $data['mock_api_operation'] = 'cancel';
                         $data['orderId'] = $fruugoId;
+                        $data['mock_api_operation'] = 'cancel_item';
+                        $data['fruugoProductId'] = $orderItem->getFruugoProductId();
                     }
                 }
 
@@ -141,19 +160,21 @@ class Fruugo_Integration_Model_Observer
 
                 if ($httpcode == 200) {
                     $this->_saveHistoryComment($order, "Sent notification to Fruugo of cancellation of order {$fruugoId}. Details: {$postFields}");
-                    Fruugo_Integration_Helper_Logger::log("Sent notification to Fruugo of cancellation of order {$fruugoId}. Details: {$postFields}");
+                    $this->_writeLog("Sent notification to Fruugo of cancellation of order {$fruugoId}. Details: {$postFields}", self::$ALWAYS);
                 } else {
-                    $this->_saveHistoryComment($order, "Failed to send notification to Fruugo of cancellation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
-                    Fruugo_Integration_Helper_Logger::log("Failed to send notification to Fruugo of cancellation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
+                    $message = "Failed to send notification to Fruugo of cancellation of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}";
+                    $this->_writeLog($message, self::$ERROR);
+                    throw new Exception($message);
                 }
             }
-
         } catch (Exception $ex) {
             Mage::logException($ex);
+             // Throw exception to stop invoice/order save
+            throw $ex;
         }
     }
 
-    public function orderShipment(Varien_Event_Observer $observer)
+    public function beforeSaveShipment(Varien_Event_Observer $observer)
     {
         $apiUrl = Fruugo_Integration_Helper_Defines::FRUUGO_ORDERS_ENDPOINT;
 
@@ -258,10 +279,12 @@ class Fruugo_Integration_Model_Observer
 
                     if ($orders->length == 0) {
                         $this->_saveHistoryComment($order, "Fruugo returned invalid data for shipped order $fruugoId. Response: $shippedOrder");
-                        Fruugo_Integration_Helper_Logger::log("Fruugo returned invalid data for shipped order $fruugoId. Response: $shippedOrder");
+                        $message = "Fruugo returned invalid data for shipped order $fruugoId. Response: $shippedOrder";
+                        $this->_writeLog($message, self::$WARNING);
+                        throw new Exception($message);
                     } else {
                         $this->_saveHistoryComment($order, "Sent notification to Fruugo of shipment of order $fruugoId");
-                        Fruugo_Integration_Helper_Logger::log("Sent notification to Fruugo of shipment of order $fruugoId");
+                        $this->_writeLog("Sent notification to Fruugo of shipment of order $fruugoId", self::$INFO);
                         foreach ($orders as $orderXml) {
                             $orderArray = $ordersFeedProcessor->convertXmlToArray($orderXml);
                             foreach ($orderArray['shipments'] as $shipment) {
@@ -271,50 +294,56 @@ class Fruugo_Integration_Model_Observer
                                     'created_at' => date_format(new DateTime('NOW'), 'Y-m-d H:i:s'));
 
                                 $model = Mage::getModel('integration/shipment')->setData($data);
-                                try {
-                                    $insertId = $model->save()->getId();
-                                    Fruugo_Integration_Helper_Logger::log("Saved shipment info of Fruugo order {$fruugoId}. ShipmentId: {$shipmentId}");
-                                } catch (Exception $ex) {
-                                    Mage::logException($ex);
-                                }
+                                $insertId = $model->save()->getId();
+                                $this->_writeLog("Saved shipment info of Fruugo order {$fruugoId}. ShipmentId: {$shipmentId}", self::$INFO);
                             }
                         }
                     }
-                    Fruugo_Integration_Helper_Logger::log("Sent notification to Fruugo of shipment of order {$fruugoId}. Details: {$postFields}");
+
+                    $this->_writeLog("Sent notification to Fruugo of shipment of order {$fruugoId}. Details: {$postFields}", self::$ALWAYS);
                 } else {
-                    Fruugo_Integration_Helper_Logger::log("Failed to send notification to Fruugo of shipment of order {$fruugoId}. Server response code: {$httpcode}. Response message: {$response}");
+                    $message = "Failed to send notification to Fruugo of shipment of order {$fruugoId}. Server response code: {$httpcode}. Response message: {$response}";
+                    $this->_writeLog($message, self::$ERROR);
+                    throw new Exception($message);
                 }
             }
         } catch (Exception $ex) {
             Mage::logException($ex);
+            // Throw exception to stop shipment/order save
+            Mage::getSingleton('core/session')->addError($ex->getMessage());
+            throw $ex;
         }
     }
 
-    public function orderRefunded(Varien_Event_Observer $observer)
+    public function beforeSaveRefund($order, $fruugoId)
     {
-        $apiUrl = Fruugo_Integration_Helper_Defines::FRUUGO_ORDERS_ENDPOINT;
         try {
-            $event = $observer->getEvent();
-            $creditmemo = $event->getCreditmemo();
-            $order = $creditmemo->getOrder();
-            $fruugoId = $order->getFruugoOrderId();
+            $creditMemos = Mage::getResourceModel('sales/order_creditmemo_collection')
+                        ->addFieldToFilter('order_id', $order->getId());
 
-            if (!empty($fruugoId) && $fruugoId !== null) {
-                $data = array();
-                $devMode = Mage::getStoreConfig('integration_options/orders_options/dev_mode');
+            if (count($creditMemos) == 0) {
+                return;
+            }
 
-                if ($devMode == '1') {
-                    $apiUrl = Mage::getStoreConfig('integration_options/orders_options/order_api_url');
+            $apiUrl = Fruugo_Integration_Helper_Defines::FRUUGO_ORDERS_ENDPOINT;
+            $data = array();
+            $devMode = Mage::getStoreConfig('integration_options/orders_options/dev_mode');
 
-                    if (strpos($apiUrl, '127.0.0.1')) {
-                        $data['mock_api_operation'] = 'return';
-                        $data['orderId'] = $fruugoId;
-                    }
+            if ($devMode == '1') {
+                $apiUrl = Mage::getStoreConfig('integration_options/orders_options/order_api_url');
+
+                if (strpos($apiUrl, '127.0.0.1')) {
+                    $data['mock_api_operation'] = 'return';
+                    $data['orderId'] = $fruugoId;
                 }
+            }
 
-                $apiUrl .= '/return';
-                $postFields = 'orderId='.$fruugoId;
+            $apiUrl .= '/return';
+            $postFields = 'orderId='.$fruugoId;
+
+            foreach ($creditMemos as $creditmemo) {
                 $itemsRefunded = $creditmemo->getAllItems();
+
                 foreach ($itemsRefunded as $refundedItem) {
                     $orderItem = $refundedItem->getOrderItem();
                     $itemInfo = $orderItem->getFruugoProductId().','
@@ -323,20 +352,24 @@ class Fruugo_Integration_Model_Observer
 
                     $postFields .= '&item=' . $itemInfo;
                 }
+            }
 
-                $data['postFields'] = $postFields;
-                list($httpcode, $response) = $this->_sendToApi($apiUrl, $data);
+            $postFields .= '&returnReason=other';
+            $data['postFields'] = $postFields;
+            list($httpcode, $response) = $this->_sendToApi($apiUrl, $data);
 
-                if ($httpcode == 200) {
-                    $this->_saveHistoryComment($order, "Sent return notification to Fruugo of order {$fruugoId}. Details: {$postFields}");
-                    Fruugo_Integration_Helper_Logger::log("Sent return notification to Fruugo of order {$fruugoId}. Details: {$postFields}");
-                } else {
-                    $this->_saveHistoryComment($order, "Failed to send notification to Fruugo of return of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
-                    Fruugo_Integration_Helper_Logger::log("Failed to send notification to Fruugo of return of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}");
-                }
+            if ($httpcode == 200) {
+                $this->_saveHistoryComment($order, "Sent return notification to Fruugo of order {$fruugoId}. Details: {$postFields}");
+                $this->_writeLog("Sent return notification to Fruugo of order {$fruugoId}. Details: {$postFields}", self::$ALWAYS);
+            } else {
+                $message = "Failed to send notification to Fruugo of return of order {$fruugoId}. Server response code: {$httpcode}, response message: {$response}";
+                $this->_writeLog($message, self::$ERROR);
+                throw new Exception($message);
             }
         } catch (Exception $ex) {
             Mage::logException($ex);
+            // Throw exception to stop invoice/order save
+            throw $ex;
         }
     }
 
@@ -382,5 +415,10 @@ class Fruugo_Integration_Model_Observer
         curl_close($ch);
 
         return array($httpcode, $response);
+    }
+
+    protected function _writeLog($message, $level = Fruugo_Integration_Helper_Logger::DEBUG)
+    {
+        Fruugo_Integration_Helper_Logger::log($message, $level);
     }
 }

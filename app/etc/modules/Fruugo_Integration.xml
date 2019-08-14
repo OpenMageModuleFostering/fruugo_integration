@@ -48,42 +48,24 @@
                     </Fruugo_Integration_Model_Observer>
                 </observers>
             </sales_order_save_before>
-            <sales_order_invoice_pay>
+            <sales_order_invoice_save_before>
                 <observers>
                     <Fruugo_Integration_Model_Observer>
                         <type>singleton</type>
                         <class>Fruugo_Integration_Model_Observer</class>
-                        <method>orderInvoiced</method>
+                        <method>beforeSaveInvoice</method>
                     </Fruugo_Integration_Model_Observer>
                 </observers>
-            </sales_order_invoice_pay>
-            <sales_order_item_cancel>
+            </sales_order_invoice_save_before>
+            <sales_order_shipment_save_before>
                 <observers>
-                    <Fruugo_Integration_Model_Observer>
+                    <Fruugo_Integration>
                         <type>singleton</type>
                         <class>Fruugo_Integration_Model_Observer</class>
-                        <method>orderCancelled</method>
-                    </Fruugo_Integration_Model_Observer>
+                        <method>beforeSaveShipment</method>
+                    </Fruugo_Integration>
                 </observers>
-            </sales_order_item_cancel>
-            <sales_order_shipment_save_after>
-                <observers>
-                    <Fruugo_Integration_Model_Observer>
-                        <type>singleton</type>
-                        <class>Fruugo_Integration_Model_Observer</class>
-                        <method>orderShipment</method>
-                    </Fruugo_Integration_Model_Observer>
-                </observers>
-            </sales_order_shipment_save_after>
-            <sales_order_payment_refund>
-                <observers>
-                    <Fruugo_Integration_Model_Observer>
-                        <type>singleton</type>
-                        <class>Fruugo_Integration_Model_Observer</class>
-                        <method>orderRefunded</method>
-                    </Fruugo_Integration_Model_Observer>
-                </observers>
-            </sales_order_payment_refund>
+            </sales_order_shipment_save_before>
         </events>
     </global>
 </config>

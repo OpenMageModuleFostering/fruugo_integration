@@ -61,7 +61,7 @@ class Fruugo_Integration_ProductsFeedGeneratorProfiler extends Fruugo_Integratio
         return $val;
     }
 
-    protected function _getAttributesText($language, $attributeName, $optionId, $storeId) {
+    protected function _getAttributesText($language, $attributeName, $optionId, $storeId = 0) {
         $this->_startTimer('_getAttributesText');
         $val = parent::_getAttributesText($language, $attributeName, $optionId, $storeId);
         $this->_stopTimer('_getAttributesText');
