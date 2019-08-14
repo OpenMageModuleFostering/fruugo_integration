@@ -118,6 +118,7 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         $lastName = $shippingAddress['lastName'];
         $streetAddress = $shippingAddress['streetAddress'];
         $city = $shippingAddress['city'];
+        $province = $shippingAddress['province'];
         $postcode = $shippingAddress['postalCode'];
         $countryCode = $shippingAddress['countryCode'];
         $phoneNumber = $shippingAddress['phoneNumber'];
@@ -196,7 +197,7 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
             'street' => $streetAddress,
             'city' => $city,
             'postcode' => $postcode,
-            'region_id' => '1',
+            'region_id' => empty($province) ? 'No region' : $this->getRegionIdByProvince($province, $countryCode),
             'telephone' => $phoneNumber,
             'country_id' => $countryCode
         );
@@ -300,6 +301,34 @@ class Fruugo_Integration_OrdersFeedProcessor extends Mage_Core_Helper_Abstract
         }
 
         return $arr;
+    }
+
+
+    private function getRegionIdByProvince($province, $countryCode)
+    {
+        $resource = Mage::getSingleton('core/resource');
+        $readConnection = $resource->getConnection('core_read');
+        $writeConnection = $resource->getConnection('core_write');
+        $tablePrefix = Mage::getConfig()->getTablePrefix();
+        $regionTable = $tablePrefix . 'directory_country_region';
+        $provinceUpper = strtoupper($province);
+        $countryUpper = strtoupper($countryCode);
+
+        // get region if exist
+        $selectRegionQuery = "SELECT * FROM $regionTable WHERE UPPER(country_id) = '{$countryUpper}' AND (UPPER(default_name) ='{$provinceUpper}' OR UPPER(code) ='{$provinceUpper}')";
+        $regionId = $readConnection->fetchOne($selectRegionQuery);
+
+        if (!$regionId) {
+            // insert region
+            $regoinCode = strtoupper(preg_replace('/\s+/', '', $province));
+            $createRegionQuery = "INSERT INTO $regionTable (country_id, code , default_name) VALUES ('{$countryCode}', '{$regoinCode}', '{$province}')";
+            $writeConnection->query($createRegionQuery);
+
+            // get new region id
+            $regionId = $writeConnection->lastInsertId();
+        }
+
+        return $regionId;
     }
 
     private function _randomPassword()
