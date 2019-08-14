@@ -276,8 +276,8 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         }
 
         // Brand *R
-        if ($product->getBrand() !== null) {
-            $productXml->addChild('Brand', htmlspecialchars($product->getBrand()));
+        if ($product->getBrand() !== null && $product->getAttributeText('brand')) {
+            $productXml->addChild('Brand', htmlspecialchars($product->getAttributeText('brand')));
         }
 
         // Manufacturer *O
@@ -420,7 +420,11 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
                 }
 
                 // title
-                $name = Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'name', $store->getId());
+                if (isset($parentProduct)) {
+                    $name = Mage::getResourceModel('catalog/product')->getAttributeRawValue($parentProduct->getId(), 'name', $store->getId());
+                } else {
+                    $name = Mage::getResourceModel('catalog/product')->getAttributeRawValue($product->getId(), 'name', $store->getId());
+                }
                 $descriptionXml->addChild('Title', htmlspecialchars($name));
 
                 // description
