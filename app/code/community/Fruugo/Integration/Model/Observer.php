@@ -38,7 +38,8 @@ class Fruugo_Integration_Model_Observer
 
             if (!empty($fruugoId) && $fruugoId !== null) {
                 $existingStatus = null;
-                if (!empty($order->getId()) && $order->getId() !== null) {
+                $orderId = $order->getId();
+                if (!empty($orderId) && $orderId !== 0) {
                     $origData = $order->getOrigData();
                 }
             }
