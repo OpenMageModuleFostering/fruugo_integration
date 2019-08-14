@@ -109,6 +109,16 @@
                             <show_in_store>1</show_in_store>
                             <comment>Refresh countries mulitple select list to restrict product display on Fruugo</comment>
                         </refresh_countries>
+                        <language_store translate="label">
+                            <label>Langage Store Mapping</label>
+                            <frontend_model>Fruugo_Integration_Block_Languagestoremapping</frontend_model>
+                            <backend_model>adminhtml/system_config_backend_serialized_array</backend_model>
+                            <sort_order>50</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>Choose a default store for a language to export product description.</comment>
+                        </language_store>
                     </fields>
                 </products_options>
                 <orders_options translate="label" module="integration">

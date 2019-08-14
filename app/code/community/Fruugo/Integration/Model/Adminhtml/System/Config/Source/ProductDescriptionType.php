@@ -38,7 +38,8 @@ class Fruugo_Integration_Model_Adminhtml_System_Config_Source_ProductDescription
 
         array_push($descriptionTypes, array('value' => 'long', 'label' => 'Description only'));
         array_push($descriptionTypes, array('value' => 'short', 'label' => 'Short description only'));
-        array_push($descriptionTypes, array('value' => 'merge', 'label' => 'Merge description and short description'));
+        array_push($descriptionTypes, array('value' => 'merge', 'label' => 'Merge description and short description (description at first)'));
+        array_push($descriptionTypes, array('value' => 'merge_short_first', 'label' => 'Merge short description and description (short description at first)'));
 
         return $descriptionTypes;
     }

@@ -48,21 +48,28 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
                 ->addAttributeToFilter('status', Mage_Catalog_Model_Product_Status::STATUS_ENABLED) // only select enabled products
                 ->addAttributeToFilter('type_id', Mage_Catalog_Model_Product_Type::TYPE_SIMPLE); // only select simple products
 
+            // Get store langauge map or use null if none
+            $storelangsSettings = Mage::getStoreConfig('integration_options/products_options/language_store');
+            $storelangsMapping = empty($storelangsSettings) ? null : unserialize($storelangsSettings);
+
             foreach ($products as $product) {
                 $disabledOnFruugo = false;
                 $productCountries = Mage::getModel('integration/countries')->load($product->getId(), 'product_id');
                 if (isset($productCountries) && $productCountries->getFruugoCountries() == 'Disabled') {
                     $disabledOnFruugo = true;
                 }
-                $imageUrl = $product->getImageUrl();
+
+                $parentProduct = $this->_getParentProduct($product);
+                $images = $this->_getProductImages($product, $parentProduct);
+
                 if (!$disabledOnFruugo &&
                   $product->getSku() !== null &&
                   $product->getName() !== null &&
                   $product->getDescription() !== null &&
                   $product->getPrice() !== null &&
-                  !empty($imageUrl)) {
+                  count($images) > 0) {
                     $productXml = $productsXml->addChild('Product');
-                    $productXml = $this->_fillProductXml($productXml, $product);
+                    $productXml = $this->_fillProductXml($productXml, $product, $storelangsMapping);
                 }
             }
 
@@ -71,17 +78,13 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         }
     }
 
-    public function _fillProductXml($productXml, $product)
+    public function _fillProductXml($productXml, $product, $storelangsMapping)
     {
         // M: Mandatory R: Recommended O: Optional
-        $parentProduct = null;
-
-        $parentIds = Mage::getResourceSingleton('catalog/product_type_configurable')
-        ->getParentIdsByChild($product->getId());
+        $parentProduct = $this->_getParentProduct($product);
 
         // ProductId *M
-        if (isset($parentIds[0])) {
-            $parentProduct = Mage::getModel('catalog/product')->load($parentIds[0]);
+        if (isset($parentProduct)) {
             $productXml->addChild('ProductId', $parentProduct->getId());
         } else {
             $productXml->addChild('ProductId', $product->getId());
@@ -125,9 +128,21 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         }
 
         // Imageurl1 *M
-        $productXml->addChild('Imageurl1', htmlspecialchars(Mage::helper('catalog/image')->init($product, 'image')));
-
         // Imageurl2, Imageurl3, Imageurl4, Imageurl5 *R
+        $images = $this->_getProductImages($product, $parentProduct);
+        $imageIndex = 0;
+
+        foreach ($images as $image) {
+            if ($imageIndex >= 5) {
+                break;
+            }
+
+            $imageUrl = $image->getUrl();
+            if (strpos($imageUrl, 'placeholder') !== true) {
+                $productXml->addChild('Imageurl'.($imageIndex + 1), $imageUrl);
+                $imageIndex++;
+            }
+        }
 
         // StockStatus & StockQuantity *M
         $stockItem = Mage::getModel('cataloginventory/stock_item')->loadByProduct($product);
@@ -152,53 +167,64 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
         // Description Node
         $stores = Mage::app()->getStores(false);
 
+        $addedLanguages = array();
         foreach ($stores as $store) {
             // store 'fruugo' is for Fruugo orders
             if ($store->getCode() != 'fruugo') {
-                $product->setStoreId($store->getId())->load($product->getId());
+                $product = $product->setStoreId($store->getId())->load($product->getId());
 
                 $localeCode = Mage::getStoreConfig('general/locale/code', $store->getId());
                 $language = substr($localeCode, 0, strpos($localeCode, '_'));
 
-                // Language *R
-                $descriptionXml = $productXml->addChild('Description');
-                $descriptionXml->addChild('Language', $language);
+                // Make sure no language is added more than once
+                if (!in_array($language, $addedLanguages)) {
+                    // Add description when no store selected for language OR the store is selected for the langauge in storelangsMapping array
+                    if ($storelangsMapping == null || $storelangsMapping[$localeCode] == "" || $storelangsMapping[$localeCode] == $store->getCode()) {
+                        // Language *R
+                        $descriptionXml = $productXml->addChild('Description');
+                        $descriptionXml->addChild('Language', $language);
 
-                $descriptionXml->addChild('Title', htmlspecialchars($product->getName()));
+                        $descriptionXml->addChild('Title', htmlspecialchars($product->getName()));
 
-                // description
-                $nestedDescriptionXml = $descriptionXml->addChild('Description');
-                $descriptionType = Mage::getStoreConfig('integration_options/products_options/descrption_type');
+                        // description
+                        $nestedDescriptionXml = $descriptionXml->addChild('Description');
+                        $descriptionType = Mage::getStoreConfig('integration_options/products_options/descrption_type');
 
-                if ($descriptionType == 'long') {
-                    $this->_addCData($nestedDescriptionXml, $product->getDescription());
-                } elseif ($descriptionType == 'short') {
-                    $this->_addCData($nestedDescriptionXml, $product->getShortDescription());
-                } else {
-                    $this->_addCData($nestedDescriptionXml, $product->getDescription() . PHP_EOL . $product->getShortDescription());
-                }
+                        if ($descriptionType == 'long') {
+                            $this->_addCData($nestedDescriptionXml, $product->getDescription());
+                        } elseif ($descriptionType == 'short') {
+                            $this->_addCData($nestedDescriptionXml, $product->getShortDescription());
+                        } elseif ($descriptionType == 'merge_short_first') {
+                            $this->_addCData($nestedDescriptionXml, $product->getShortDescription() . PHP_EOL . $product->getDescription());
+                        } else {
+                            $this->_addCData($nestedDescriptionXml, $product->getDescription() . PHP_EOL . $product->getShortDescription());
+                        }
 
-                // AttributeColor *R
-                if ($product->getColor() !== null && $product->getAttributeText('color')) {
-                    $descriptionXml->addChild('AttributeColor', $product->getAttributeText('color'));
-                }
+                        // AttributeColor *R
+                        if ($product->getColor() !== null && $product->getAttributeText('color')) {
+                            $descriptionXml->addChild('AttributeColor', $product->getAttributeText('color'));
+                        }
 
-                // AttributeSize *R
-                if ($product->getShoeSize() !== null && $product->getAttributeText('shoe_size')) {
-                    $descriptionXml->addChild('AttributeSize', $product->getAttributeText('shoe_size'));
-                } elseif ($product->getSize() !== null && $product->getAttributeText('size')) {
-                    $descriptionXml->addChild('AttributeSize', $product->getAttributeText('size'));
-                }
+                        // AttributeSize *R
+                        if ($product->getShoeSize() !== null && $product->getAttributeText('shoe_size')) {
+                            $descriptionXml->addChild('AttributeSize', $product->getAttributeText('shoe_size'));
+                        } elseif ($product->getSize() !== null && $product->getAttributeText('size')) {
+                            $descriptionXml->addChild('AttributeSize', $product->getAttributeText('size'));
+                        }
 
-                // optional attributes: Arrtibute1 - Attribute10 *O
-                if ($product->getFit() !== null) {
-                    $descriptionXml->addChild('Attribute1', $product->getFit());
-                }
-                if ($product->getLength() !== null) {
-                    $descriptionXml->addChild('Attribute2', $product->getLength());
-                }
-                if ($product->getWidth() !== null) {
-                    $descriptionXml->addChild('Attribute3', $product->getWidth());
+                        // optional attributes: Arrtibute1 - Attribute10 *O
+                        if ($product->getFit() !== null) {
+                            $descriptionXml->addChild('Attribute1', $product->getFit());
+                        }
+                        if ($product->getLength() !== null) {
+                            $descriptionXml->addChild('Attribute2', $product->getLength());
+                        }
+                        if ($product->getWidth() !== null) {
+                            $descriptionXml->addChild('Attribute3', $product->getWidth());
+                        }
+
+                        array_push($addedLanguages, $language);
+                    }
                 }
             }
         }
@@ -224,21 +250,86 @@ class Fruugo_Integration_ProductsFeedGenerator extends Mage_Core_Helper_Abstract
                     $priceXml->addChild('Country', $existingList);
                 }
 
-                $taxCalculation = Mage::getModel('tax/calculation');
-                $request = $taxCalculation->getRateRequest(null, null, null, $store);
-                $normalPriceExclTax = $product->getFinalPrice();
+                // Normal price.
+                $taxHelper = Mage::helper('tax');
+                $normalPriceExclTax = $taxHelper->getPrice($product, $product->getPrice(), false);
                 $priceXml->addChild('NormalPriceWithoutVAT', number_format($normalPriceExclTax, 2, '.', ''));
 
+                // VATRate.
+                $taxCalculation = Mage::getModel('tax/calculation');
+                $request = $taxCalculation->getRateRequest(null, null, null, $store);
                 $taxClassId = $product->getTaxClassId();
                 $percent = $taxCalculation->getRate($request->setProductClassId($taxClassId));
                 $priceXml->addChild('VATRate', number_format($percent, 2, '.', ''));
 
-                // DiscountPriceStartDate *O
-                // DiscountPriceEndDate *O
+                // Discount price
+                $finalPriceExclTax = $taxHelper->getPrice($product, $product->getFinalPrice(), false);
+                $rulePriceExclTax = Mage::getModel('catalogrule/rule')->calcProductPriceRule($product, $normalPriceExclTax);
+                $discountedPriceExclTax = null;
+
+                if ($rulePriceExclTax == null || $finalPriceExclTax < $rulePriceExclTax) {
+                    $discountedPriceExclTax = $finalPriceExclTax;
+                } else {
+                    $discountedPriceExclTax = $rulePriceExclTax;
+                }
+                if ($normalPriceExclTax > $discountedPriceExclTax) {
+                    $priceXml->addChild('DiscountPriceWithoutVAT', number_format($discountedPriceExclTax, 2, '.', ''));
+                    // DiscountPriceStartDate *O
+                    if ($product->getSpecialFromDate()) {
+                        $fromTime = strtotime($product->getSpecialFromDate());
+                        $formatedFromTimeStr = date('Y-m-d',$fromTime);
+                        $priceXml->addChild('DiscountPriceStartDate', $formatedFromTimeStr);
+                    }
+
+                    // DiscountPriceEndDate *O
+                    if ($product->getSpecialToDate()) {
+                        $toTime = strtotime($product->getSpecialToDate());
+                        $fromatedToTimeStr = date('Y-m-d',$toTime);
+                        $priceXml->addChild('DiscountPriceEndDate', $fromatedToTimeStr);
+                    }
+                }
             }
         }
 
         return $productXml;
+    }
+
+    private function _getProductImages($product, $parentProduct)
+    {
+        $productObj = $product->load($product->getId());
+        $images = array();
+        $skuImages = array_values($productObj->getMediaGalleryImages()->getItems());
+
+        if (!empty($skuImages)) {
+            foreach ($skuImages as $skuImage) {
+                array_push($images, $skuImage);
+            }
+        }
+
+        if (isset($parentProduct)) {
+            $parentImages = array_values($parentProduct->getMediaGalleryImages()->getItems());
+            if (!empty($parentImages)) {
+                foreach ($parentImages as $parentImage) {
+                    array_push($images, $parentImage);
+                }
+            }
+        }
+
+        return $images;
+    }
+
+    private function _getParentProduct($product)
+    {
+        $parentProduct = null;
+
+        $parentIds = Mage::getResourceSingleton('catalog/product_type_configurable')
+        ->getParentIdsByChild($product->getId());
+
+        if (isset($parentIds[0])) {
+            $parentProduct = Mage::getModel('catalog/product')->load($parentIds[0]);
+        }
+
+        return $parentProduct;
     }
 
     private function _addCData($xml, $cdata_text)
