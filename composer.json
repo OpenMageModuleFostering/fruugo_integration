@@ -1,16 +1,19 @@
 {
-    "name": "OpenMageModuleFostering/Fruugo_Integration",
+    "name": "OpenMageModuleFostering\/Fruugo_Integration",
     "type": "magento-module",
     "license": "GNU",
     "homepage": "",
     "description": "This is a plugin for Magento 1.7 - 1.9 that provides integration with the Fruugo products and orders API.",
     "authors": [
-    {
-        "name": "inoutput.io",
-        "email": "support@inoutput.io"
-    }
-],
+        {
+            "name": "inoutput.io",
+            "email": "support@inoutput.io"
+        }
+    ],
     "suggest": {
-        "magento-hackathon/magento-composer-installer": "*"
-    }
+        "magento-hackathon\/magento-composer-installer": "*"
+    },
+    "keywords": [
+        "openmage-module"
+    ]
 }
